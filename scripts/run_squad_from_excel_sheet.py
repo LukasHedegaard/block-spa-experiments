@@ -18,28 +18,25 @@ def try_int(val):
 if __name__ == "__main__":
     df = parse_excel_hparams(sheet_name="Details - SQuAD")
 
-    logs_dir = Path("remote/scripts/logs/baselines")
+    logs_dir = Path("runs")
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     processes = []
     for i, row in df.iterrows():
-        identifier = f"{row['EXP ID']}_{row['Effective encoder remain weights %']:.2f}%"
-        # if row["Effective encoder remain weights %"] <= 100:
-        #     continue
-
+        identifier = f"{row['EXP ID']}_{row['Effective encoder remain weights %']:.1f}%"
+        # Select a particular run based on its id here:
         if identifier not in {
-            #     # "l1_0._0.1_1_2_l1_*_3e-5_1e-2_sigmoied_threshold_constant_0._10_epochs_93.64%",
-            #     # "l1_0._0.1_1_2_l1_*_3e-5_1e-2_sigmoied_threshold_constant_0._10_epochs_13.87%",
-            "magnitude_1.0_*_1_2_null_0._3e-5_0._magnitude_null_0._10_epochs_60.10%"
+            # Corresponds to row 5 in /hparams/hyperparameters.xlsx sheet "Details - SQuAD"
+            "magnitude_1.0_*_1_2_null_0._3e-5_0._magnitude_null_0._10_epochs_90.0%"
         }:
-            # if "magnitude" not in identifier:
+            print(f"Skipping run {i}: {identifier}")
             continue
+
         print(f"Spawning run {i}: {identifier}")
-        # continue
+
         command = [
             "python",
             "block_movement_pruning/masked_run_squad.py",
-            # "remote/scripts/run_squad.py",
             "--identifier",
             identifier,
             "--overwrite_output_dir",

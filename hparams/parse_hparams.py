@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def parse_excel_hparams(
-    file_path: Path = Path(__file__).parent / "movement-pruning-paper-hparams.xlsx",
+    file_path: Path = Path(__file__).parent / "hyperparameters.xlsx",
     sheet_name: Union[str, int] = 0,
     remove_distil=True,
     remove_global=True,
