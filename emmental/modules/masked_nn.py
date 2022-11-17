@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022-present, Lukas Hedegaard.
+# Copyright 2022-present, Anonymous.
 # Copyright 2020-present, the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

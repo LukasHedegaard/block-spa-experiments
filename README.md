@@ -8,9 +8,8 @@ This repository contains experiments for the block-based SPA, __Structured Pruni
 </div>
 
 ## Installation ⚙️
-- Clone this repository and enter it: 
+- Enter this repositoy: 
     ```bash
-    git clone https://github.com/LukasHedegaard/block-spa-experiments.git
     cd block-spa-experiments
     ```
 - (Optionally) create conda environment:

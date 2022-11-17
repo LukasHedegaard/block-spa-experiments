@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022-present, Lukas Hedegaard.
+# Copyright 2022-present, Anonymous.
 # Copyright 2018 The Google AI Language Team Authors  The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
