@@ -18,7 +18,7 @@ def try_int(val):
 if __name__ == "__main__":
     df = parse_excel_hparams(sheet_name="Details - SQuAD", remove_distil=True, remove_global=True)
 
-    logs_dir = Path("remote/scripts/logs/baselines")
+    logs_dir = Path("runs")
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     processes = []
