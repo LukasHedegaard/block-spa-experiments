@@ -77,8 +77,8 @@ def create_masked_linear(in_features, out_features, config, bias=True):
         num_prototypes=config.num_splopa_prototypes,
         prototype_rank=config.splopa_prototype_rank,
         shared_prototypes=config.shared_splopa_prototypes,
-        shared_pos_weights=config.shared_pos_weights,
-        adapter_init_range=config.adapter_init_range,
+        shared_pos_weights=config.shared_splopa_pos_weights,
+        adapter_init_range=config.splopa_init_range,
     )
     return ret
 
