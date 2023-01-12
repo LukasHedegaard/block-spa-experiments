@@ -335,14 +335,10 @@ def train(args, train_dataset, model, tokenizer, teacher=None, mlogger=None):
     )
     set_seed(args)  # Added here for reproducibility
     for epoch in train_iterator:
-        if epoch > 1:
-            break
         epoch_iterator = tqdm(
             train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0]
         )
         for step, batch in enumerate(epoch_iterator):
-            if step > 10:
-                break
             if steps_trained_in_current_epoch == 0:
                 mlogger.add_scalar("epoch", epoch, global_step)
             # Skip past any already trained steps if resuming training
