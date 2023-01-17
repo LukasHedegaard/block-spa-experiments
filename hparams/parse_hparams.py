@@ -35,10 +35,10 @@ def parse_excel_hparams(
         df = df[~df["Unnamed: 0"].isin(["B2", "B4", "D2", "D4"])]
 
     # Drop Columns with no hparams
-    df = df.drop(columns=["Unnamed: 0", "Unnamed: 1", "Unnamed: 7"])
+    df = df.drop(columns=[c for c in df.columns if "Unnamed" in c])
     return df
 
 
 if __name__ == "__main__":
-    file_path = Path(__file__).parent / "movement-pruning-paper-hparams.xlsx"
-    parse_excel_hparams(file_path, "Details - SQuAD")
+    file_path = Path(__file__).parent / "hyperparameters.xlsx"
+    parse_excel_hparams(file_path, "Details - MNLI")
