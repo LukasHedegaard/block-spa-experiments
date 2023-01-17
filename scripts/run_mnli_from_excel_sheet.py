@@ -17,7 +17,7 @@ def try_int(val):
 
 if __name__ == "__main__":
     df = parse_excel_hparams(
-        sheet_name="Details - SQuAD", remove_distil=True, remove_global=True
+        sheet_name="Details - MNLI", remove_distil=True, remove_global=True
     )
 
     logs_dir = Path("wandb")
@@ -28,13 +28,9 @@ if __name__ == "__main__":
         identifier = f"{row['EXP ID']}_{row['Effective encoder remain weights %']:.1f}%"
 
         # Select a particular run based on its id here:
-        if row["Marker"] != "*":
+        if row["Marker"] != "*" or row["pruning_method"] != "sigmoied_threshold":
             # if identifier not in {
-            #     # Corresponds to row 5 in /hparams/hyperparameters.xlsx sheet "Details - SQuAD"
-            #     "l0_1.0_1.0_1_1_l0_*._3e-5_1e-1_l0_constant_2.197_10_epoch_0.1%",
-            #     "topK_1.0_*_1_2_null_0._3e-5_1e-2_topK_constant_0._10_epochs_0.3%",
-            #     "topK_1.0_*_1_2_null_0._3e-5_1e-2_topK_constant_0._10_epochs_0.1%",
-            #     "l1_0._0.1_1_2_l1_*_3e-5_1e-2_sigmoied_threshold_constant_0._10_epochs_0.1%",
+            # Corresponds to row 5 in /hparams/hyperparameters.xlsx sheet "Details - SQuAD"
             # }:
             # print(f"Skipping run {i}: {identifier}")
             continue
@@ -44,18 +40,14 @@ if __name__ == "__main__":
         print(f"Spawning run {i}: {identifier}")
         command = [
             "python",
-            "block_movement_pruning/masked_run_squad.py",
-            "--identifier",
-            identifier,
+            "block_movement_pruning/masked_run_glue.py",
+            "--task_name",
+            "mnli",
             "--overwrite_output_dir",
             "--output_dir",
             "runs/",
             "--data_dir",
-            "squad_data",
-            "--train_file",
-            "train-v1.1.json",
-            "--predict_file",
-            "dev-v1.1.json",
+            "/home/lh/datasets/GLUE/data/MNLI",
             "--do_train",
             "--do_eval",
             "--do_lower_case",
