@@ -1,4 +1,5 @@
 # coding=utf-8
+# Copyright 2022-present, Lukas Hedegaard.
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -16,10 +17,10 @@
 """ Fine-pruning Masked BERT on sequence classification on GLUE."""
 
 import argparse
+import datetime
 import glob
 import logging
 import os
-from pathlib import Path
 import random
 
 import numpy as np
@@ -30,7 +31,7 @@ from emmental import MaskedBertConfig, MaskedBertForSequenceClassification
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from .counts_parameters import counts_parameters  # NB: change back
+from block_movement_pruning.count_parameters import count_parameters
 
 from transformers import (
     WEIGHTS_NAME,
@@ -332,10 +333,7 @@ def train(args, train_dataset, model, tokenizer, teacher=None, mlogger=None):
         desc="Epoch",
         disable=args.local_rank not in [-1, 0],
     )
-
-    # Added here for reproducibility
-    set_seed(args)
-
+    set_seed(args)  # Added here for reproducibility
     for epoch in train_iterator:
         epoch_iterator = tqdm(
             train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0]
@@ -343,7 +341,6 @@ def train(args, train_dataset, model, tokenizer, teacher=None, mlogger=None):
         for step, batch in enumerate(epoch_iterator):
             if steps_trained_in_current_epoch == 0:
                 mlogger.add_scalar("epoch", epoch, global_step)
-
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
@@ -413,8 +410,10 @@ def train(args, train_dataset, model, tokenizer, teacher=None, mlogger=None):
                 inputs["current_config"] = current_config
 
             outputs = model(**inputs)
-            # model outputs are always tuple in transformers (see doc)
-            (loss, logits_stu) = outputs
+            (
+                loss,
+                logits_stu,
+            ) = outputs  # model outputs are always tuple in transformers (see doc)
 
             # Distillation loss
             if teacher is not None:
@@ -474,42 +473,7 @@ def train(args, train_dataset, model, tokenizer, teacher=None, mlogger=None):
                     and global_step % args.logging_steps == 0
                 ):
                     metrics_to_track = {"threshold": threshold}
-                    for name, param in model.named_parameters():
-                        try:
-                            if not param.requires_grad:
-                                continue
-                            metrics_to_track.update(
-                                {
-                                    "parameter_mean/" + name: param.data.mean(),
-                                    "parameter_std/" + name: param.data.std(),
-                                    "parameter_min/" + name: param.data.min(),
-                                    "parameter_max/" + name: param.data.max(),
-                                }
-                            )
-                            metrics_to_track.update(
-                                {
-                                    "grad_mean/" + name: param.grad.data.mean(),
-                                    "grad_std/" + name: param.grad.data.std(),
-                                }
-                            )
 
-                            if (
-                                args.regularization is not None
-                                and "mask_scores" in name
-                            ):
-                                if args.regularization == "l1":
-                                    perc = (
-                                        torch.sigmoid(param) > threshold
-                                    ).sum().item() / param.numel()
-                                elif args.regularization == "l0":
-                                    perc = (
-                                        torch.sigmoid(param - 2 / 3 * np.log(0.1 / 1.1))
-                                    ).sum().item() / param.numel()
-                                metrics_to_track.update(
-                                    {f"retained_weights_perc/{name}": perc}
-                                )
-                        except AttributeError as e:
-                            print(f"name error with {name}", e)
                     mlogger.add_scalars(
                         main_tag="train", metric_dict=metrics_to_track, step=global_step
                     )
@@ -519,20 +483,21 @@ def train(args, train_dataset, model, tokenizer, teacher=None, mlogger=None):
                 model.zero_grad()
                 global_step += 1
 
-                # Log metrics
                 if (
                     args.local_rank in [-1, 0]
                     and args.logging_steps > 0
                     and global_step % args.logging_steps == 0
                 ):
-                    # Only evaluate when single GPU otherwise metrics may not average well
-                    if args.local_rank == -1 and args.evaluate_during_training:
+                    if (
+                        args.local_rank == -1 and args.evaluate_during_training
+                    ):  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
                             mlogger.add_scalar(
                                 "eval/{}".format(key), value, global_step
                             )
 
+                    loss_scalar = (tr_loss - logging_loss) / args.logging_steps
                     learning_rate_scalar = scheduler.get_lr()
                     mlogger.add_scalar("lr", learning_rate_scalar[0], global_step)
                     if len(learning_rate_scalar) > 1:
@@ -584,14 +549,14 @@ def train(args, train_dataset, model, tokenizer, teacher=None, mlogger=None):
                     and args.save_steps > 0
                     and global_step % args.save_steps == 0
                 ):
-                    # Save model checkpoint
                     output_dir = os.path.join(
                         args.output_dir, "checkpoint-{}".format(global_step)
                     )
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
-                    # Take care of distributed/parallel training
-                    model_to_save = model.module if hasattr(model, "module") else model
+                    model_to_save = (
+                        model.module if hasattr(model, "module") else model
+                    )  # Take care of distributed/parallel training
                     model_to_save.save_pretrained(output_dir)
                     tokenizer.save_pretrained(output_dir)
 
@@ -630,16 +595,6 @@ def train(args, train_dataset, model, tokenizer, teacher=None, mlogger=None):
 
 
 def evaluate(args, model, tokenizer, prefix=""):
-    logger.info("***** Counting parameters *****")
-    remaining_count, encoder_count = counts_parameters(
-        model.state_dict(),
-        args.pruning_method,
-        args.final_threshold,
-        args.mask_block_rows,
-        args.mask_block_cols,
-        args.ampere_pruning_method,
-    )
-
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_task_names = (
         ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
@@ -651,6 +606,16 @@ def evaluate(args, model, tokenizer, prefix=""):
     )
 
     results = {}
+
+    remaining_count, encoder_count = count_parameters(
+        model.state_dict(),
+        args.pruning_method,
+        args.final_threshold,
+        args.mask_block_rows,
+        args.mask_block_cols,
+        args.ampere_pruning_method,
+    )
+
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
         eval_dataset = load_and_cache_examples(
             args, eval_task, tokenizer, evaluate=True
@@ -700,7 +665,14 @@ def evaluate(args, model, tokenizer, prefix=""):
                         else None
                     )  # XLM, DistilBERT, RoBERTa, and XLM-RoBERTa don't use segment_ids
                 if "masked" in args.model_type:
-                    inputs["threshold"] = args.final_threshold
+                    inputs["current_config"] = {}
+                    inputs["current_config"]["threshold"] = args.final_threshold
+                    inputs["current_config"][
+                        "ampere_temperature"
+                    ] = args.final_ampere_temperature
+                    inputs["current_config"][
+                        "shuffling_temperature"
+                    ] = args.final_shuffling_temperature
                     if args.global_topk:
                         if threshold_mem is None:
                             concat = torch.cat(
@@ -713,7 +685,7 @@ def evaluate(args, model, tokenizer, prefix=""):
                             n = concat.numel()
                             kth = max(n - (int(n * args.final_threshold) + 1), 1)
                             threshold_mem = concat.kthvalue(kth).values.item()
-                        inputs["threshold"] = threshold_mem
+                        inputs["current_config"]["threshold"] = threshold_mem
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
 
@@ -819,7 +791,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     return dataset
 
 
-def create_parser():
+def main():
     parser = argparse.ArgumentParser()
 
     # Required parameters
@@ -1189,30 +1161,32 @@ def create_parser():
     )
 
     parser.add_argument(
-        "--identifier",
-        type=str,
-        default="",
-        help="Additional custom identifier.",
+        "--adapter_learning_rate",
+        type=float,
+        default=1e-3,
+        help="Learning rate for parameters in the Structured Pruning Low-rank PHM Adapter.",
     )
-    return parser
 
-
-def main(args=None):
-
-    if args is None:
-        args = create_parser().parse_args()
-
-    Path(args.data_dir).mkdir(exist_ok=True, parents=True)
-
-    short_name = f"{args.model_type}_{args.data_dir}_method-{args.pruning_method}_threshold-{args.final_threshold}_lambda-{args.final_lambda}_teacher-{args.teacher_type or 'None'}"
-    print(f"HP NAME {short_name}")
-
-    if args.local_rank in [-1, 0]:
-        mlogger = MetricLogger(log_dir=args.output_dir, name=short_name, config=args)
+    args = parser.parse_args()
 
     # Regularization
     if args.regularization == "null":
         args.regularization = None
+
+    timestamp = (
+        datetime.datetime.now()
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("-", "")
+        .replace(":", "")
+    )
+    short_name = f"fineprune_{args.model_type}_{args.task_name}_method-{args.pruning_method}_threshold-{args.final_threshold}_lambda-{args.final_lambda}_teacher-{args.teacher_type or 'None'}_{timestamp}"
+    print(f"HP NAME {short_name}")
+
+    args.output_dir = os.path.join(args.output_dir, short_name)
+
+    if args.local_rank in [-1, 0]:
+        mlogger = MetricLogger(log_dir=args.output_dir, name=short_name, config=args)
 
     if (
         os.path.exists(args.output_dir)
@@ -1255,7 +1229,8 @@ def main(args=None):
     # Set seed
     set_seed(args)
 
-    # Prepare GLUE tasa    args.task_name = args.task_name.lower()
+    # Prepare GLUE task
+    args.task_name = args.task_name.lower()
     if args.task_name not in processors:
         raise ValueError("Task not found: %s" % (args.task_name))
     processor = processors[args.task_name]()
@@ -1380,8 +1355,8 @@ def main(args=None):
             result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
             results.update(result)
 
-        logger.info("Results: {}".format(results))
-        mlogger.add_scalars(main_tag="eval", metric_dict=results)
+    logger.info("Results: {}".format(results))
+    mlogger.add_scalars(main_tag="eval", metric_dict=results)
 
     return results
 

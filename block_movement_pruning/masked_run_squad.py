@@ -32,7 +32,7 @@ from emmental import MaskedBertConfig, MaskedBertForQuestionAnswering
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from counts_parameters import counts_parameters
+from block_movement_pruning.count_parameters import count_parameters
 
 from transformers import (
     AdamW,
@@ -667,7 +667,7 @@ def train(args, train_dataset, model, tokenizer, teacher=None, mlogger=None):
 
 def evaluate(args, model, tokenizer, prefix=""):
     logger.info("***** Counting parameters *****")
-    remaining_count, encoder_count = counts_parameters(
+    remaining_count, encoder_count = count_parameters(
         model.state_dict(),
         args.pruning_method,
         args.final_threshold,

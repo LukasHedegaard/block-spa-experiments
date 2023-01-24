@@ -30,7 +30,7 @@ def expand_mask(mask, args):
     return mask
 
 
-def counts_parameters(
+def count_parameters(
     state_dict,
     pruning_method,
     threshold,
@@ -125,7 +125,7 @@ if __name__ == "__main__":
         os.path.join(args.serialization_dir, "pytorch_model.bin"),
         map_location="cuda" if torch.cuda.is_available() else "cpu",
     )
-    counts_parameters(
+    count_parameters(
         st,
         args.pruning_method,
         args.threshold,
