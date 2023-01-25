@@ -28,7 +28,9 @@ if __name__ == "__main__":
         identifier = f"{row['EXP ID']}_{row['Effective encoder remain weights %']:.1f}%"
 
         # Select a particular run based on its id here:
-        if row["Marker"] != "*":  # or row["pruning_method"] != "sigmoied_threshold":
+        if (
+            row["Marker"] != "*" or row["pruning_method"] != "l0"
+        ):  # sigmoied_threshold
             # if identifier not in {
             # Corresponds to row 5 in /hparams/hyperparameters.xlsx sheet "Details - SQuAD"
             # }:
